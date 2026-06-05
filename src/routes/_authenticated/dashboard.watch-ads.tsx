@@ -32,7 +32,18 @@ function WatchAdsPage() {
   const { data: ads = [] } = useQuery({
     queryKey: ["ads"],
     queryFn: async () => {
-      const { data } = await supabase.from("ads").select("*").eq("is_active", true);
+      let { data } = await supabase.from("ads").select("*").eq("is_active", true);
+      if (!data || data.length === 0) {
+        await supabase.from("ads").insert([
+          { title: "Crypto Wallet Promo", description: "Learn about secure crypto storage", ad_url: "https://www.youtube.com/embed/dQw4w9WgXcQ", duration_seconds: 30, reward_points: 50, is_active: true },
+          { title: "NFT Marketplace", description: "Discover trending NFTs", ad_url: "https://www.youtube.com/embed/dQw4w9WgXcQ", duration_seconds: 30, reward_points: 50, is_active: true },
+          { title: "DeFi Yield Farming", description: "Maximize your returns", ad_url: "https://www.youtube.com/embed/dQw4w9WgXcQ", duration_seconds: 45, reward_points: 75, is_active: true },
+          { title: "Trading Bot Demo", description: "Automated trading explained", ad_url: "https://www.youtube.com/embed/dQw4w9WgXcQ", duration_seconds: 30, reward_points: 50, is_active: true },
+          { title: "Web3 Game Trailer", description: "Play to earn revolution", ad_url: "https://www.youtube.com/embed/dQw4w9WgXcQ", duration_seconds: 30, reward_points: 50, is_active: true },
+        ]);
+        const reload = await supabase.from("ads").select("*").eq("is_active", true);
+        data = reload.data;
+      }
       return (data ?? []) as Ad[];
     },
   });
