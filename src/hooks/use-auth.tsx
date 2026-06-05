@@ -34,9 +34,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (uid: string) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+    let { data } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+
+    // If profile row is missing entirely, create one (covers cases where the
+    // auth trigger didn't run yet).
+    if (!data) {
+      const { data: u } = await supabase.auth.getUser();
+      const meta = (u.user?.user_metadata ?? {}) as Record<string, unknown>;
+      const code = generateReferralCode();
+      await supabase.from("profiles").insert({
+        id: uid,
+        email: u.user?.email ?? null,
+        full_name: (meta.full_name as string) ?? "",
+        referral_code: code,
+        referred_by: (meta.referred_by as string) ?? null,
+      });
+      const re = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+      data = re.data;
+    } else {
+      // Backfill missing referral_code or full_name from auth metadata.
+      const patch: Record<string, unknown> = {};
+      if (!data.referral_code) patch.referral_code = generateReferralCode();
+      if (!data.full_name) {
+        const { data: u } = await supabase.auth.getUser();
+        const fn = (u.user?.user_metadata as Record<string, unknown> | undefined)?.full_name;
+        if (typeof fn === "string" && fn.trim()) patch.full_name = fn;
+      }
+      if (Object.keys(patch).length) {
+        const { data: upd } = await supabase
+          .from("profiles")
+          .update(patch)
+          .eq("id", uid)
+          .select()
+          .maybeSingle();
+        if (upd) data = upd;
+      }
+    }
+
     setProfile((data as Profile) ?? null);
   };
+
+function generateReferralCode() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let s = "";
+  for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
